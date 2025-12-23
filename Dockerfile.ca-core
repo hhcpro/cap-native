@@ -1,0 +1,37 @@
+FROM maven:3.9-eclipse-temurin-17 AS build
+
+WORKDIR /app
+
+# Copy pom files
+COPY pom.xml .
+COPY common/pom.xml common/
+COPY ca-core/pom.xml ca-core/
+
+# Download dependencies
+RUN mvn dependency:go-offline -B
+
+# Copy source
+COPY common/src common/src
+COPY ca-core/src ca-core/src
+
+# Build
+RUN mvn clean package -DskipTests -pl ca-core -am
+
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
+# Copy built jar
+COPY --from=build /app/ca-core/target/ca-core-*-shaded.jar app.jar
+
+# Create data directories
+RUN mkdir -p /data/db /data/storage
+
+# Expose ports
+EXPOSE 50051 50052
+
+# Environment variables
+ENV CA_DB_PATH=/data/db
+ENV CA_STORAGE_PATH=/data/storage
+
+CMD ["java", "-jar", "app.jar"]

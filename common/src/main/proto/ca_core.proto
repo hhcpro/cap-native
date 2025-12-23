@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package ca;
+
+option java_multiple_files = true;
+option java_package = "com.capnative.common.grpc.ca";
+option java_outer_classname = "CaCoreProto";
+
+// CaCore service handles transaction proposals from PA nodes
+service CaCore {
+  // ProposeTransaction submits a transaction from a PA node for CA approval
+  rpc ProposeTransaction(ProposeRequest) returns (ProposeResponse);
+
+  // GetLatestOffset returns the current highest ca_offset
+  rpc GetLatestOffset(GetLatestOffsetRequest) returns (GetLatestOffsetResponse);
+
+  // GetTransactionRange retrieves a range of committed transactions
+  rpc GetTransactionRange(GetTransactionRangeRequest) returns (GetTransactionRangeResponse);
+}
+
+// CaBootstrap service provides checkpoint data for PA bootstrap and repair
+service CaBootstrap {
+  // GetTrustedCheckpoint returns the latest trusted snapshot and segment info
+  rpc GetTrustedCheckpoint(GetTrustedCheckpointRequest) returns (TrustedCheckpoint);
+
+  // GetSegmentData retrieves a specific segment from object storage
+  rpc GetSegmentData(GetSegmentDataRequest) returns (GetSegmentDataResponse);
+
+  // GetSnapshotData retrieves a specific snapshot from object storage
+  rpc GetSnapshotData(GetSnapshotDataRequest) returns (GetSnapshotDataResponse);
+}
+
+message ProposeRequest {
+  string agent_id = 1;
+  int64 agent_seq = 2;
+  string tx_id = 3;
+  bytes payload = 4;
+}
+
+message ProposeResponse {
+  string tx_id = 1;
+  Decision decision = 2;
+  int64 ca_offset = 3;  // only populated if COMMITTED
+  string reason = 4;    // only populated if REJECTED
+
+  enum Decision {
+    COMMITTED = 0;
+    REJECTED = 1;
+  }
+}
+
+message GetLatestOffsetRequest {}
+
+message GetLatestOffsetResponse {
+  int64 latest_offset = 1;
+}
+
+message GetTransactionRangeRequest {
+  int64 start_offset = 1;
+  int64 end_offset = 2;
+}
+
+message GetTransactionRangeResponse {
+  repeated ConsolidatedEntry entries = 1;
+}
+
+message ConsolidatedEntry {
+  int64 ca_offset = 1;
+  string tx_id = 2;
+  string agent_id = 3;
+  bytes ledger_diffs = 4;
+  bytes metadata = 5;
+  int64 committed_at = 6;  // unix timestamp millis
+}
+
+message GetTrustedCheckpointRequest {}
+
+message TrustedCheckpoint {
+  int64 snapshot_offset = 1;
+  repeated SegmentRange segments = 2;
+  string snapshot_checksum = 3;
+  int64 created_at = 4;  // unix timestamp millis
+}
+
+message SegmentRange {
+  int64 start_offset = 1;
+  int64 end_offset = 2;
+  string checksum = 3;
+}
+
+message GetSegmentDataRequest {
+  int64 start_offset = 1;
+  int64 end_offset = 2;
+}
+
+message GetSegmentDataResponse {
+  int64 start_offset = 1;
+  int64 end_offset = 2;
+  string checksum = 3;
+  int32 schema_version = 4;
+  repeated ConsolidatedEntry entries = 5;
+}
+
+message GetSnapshotDataRequest {
+  int64 snapshot_offset = 1;
+}
+
+message GetSnapshotDataResponse {
+  int64 snapshot_offset = 1;
+  int64 snapshot_timestamp = 2;
+  bytes state_payload = 3;
+  string checksum = 4;
+  int32 schema_version = 5;
+}

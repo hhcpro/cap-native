@@ -1,0 +1,39 @@
+FROM maven:3.9-eclipse-temurin-17 AS build
+
+WORKDIR /app
+
+# Copy pom files
+COPY pom.xml .
+COPY common/pom.xml common/
+COPY pa-node/pom.xml pa-node/
+
+# Download dependencies
+RUN mvn dependency:go-offline -B
+
+# Copy source
+COPY common/src common/src
+COPY pa-node/src pa-node/src
+
+# Build
+RUN mvn clean package -DskipTests -pl pa-node -am
+
+FROM eclipse-temurin:17-jre
+
+WORKDIR /app
+
+# Copy built jar
+COPY --from=build /app/pa-node/target/pa-node-*-shaded.jar app.jar
+
+# Create data directory
+RUN mkdir -p /data/db
+
+# Expose port
+EXPOSE 50053
+
+# Environment variables
+ENV AGENT_ID=pa-node-1
+ENV PA_DB_PATH=/data/db
+ENV CA_HOST=ca-core
+ENV CA_PORT=50051
+
+CMD ["java", "-jar", "app.jar"]

@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package pa;
+
+option java_multiple_files = true;
+option java_package = "com.capnative.common.grpc.pa";
+option java_outer_classname = "PaNodeProto";
+
+// PaPublic service provides client-facing APIs
+service PaPublic {
+  // SubmitTransaction accepts a transaction from a client
+  rpc SubmitTransaction(ClientTx) returns (ClientTxReceipt);
+
+  // GetAccountView retrieves account state from local projections
+  rpc GetAccountView(AccountRequest) returns (AccountView);
+
+  // GetHealth returns the current health status of the PA node
+  rpc GetHealth(HealthRequest) returns (HealthResponse);
+}
+
+message ClientTx {
+  string tx_id = 1;  // optional, will be generated if not provided
+  string account_id = 2;
+  string operation = 3;  // e.g., "DEBIT", "CREDIT", "TRANSFER"
+  bytes payload = 4;     // operation-specific data
+  int64 client_timestamp = 5;  // unix timestamp millis
+}
+
+message ClientTxReceipt {
+  string tx_id = 1;
+  ReceiptStatus status = 2;
+  int64 l1_seq = 3;  // local sequence number
+  int64 accepted_at = 4;  // unix timestamp millis
+
+  enum ReceiptStatus {
+    ACCEPTED = 0;     // accepted into L1, pending CA approval
+    REJECTED = 1;     // rejected immediately (validation failure)
+  }
+}
+
+message AccountRequest {
+  string account_id = 1;
+}
+
+message AccountView {
+  string account_id = 1;
+  bytes account_data = 2;  // JSON or protobuf-encoded account state
+  int64 valid_up_to_ca_offset = 3;  // projections are valid through this offset
+  int64 as_of_timestamp = 4;  // unix timestamp millis
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  HealthState state = 1;
+  int64 lag_ca = 2;          // difference between CA latest and local latest
+  int64 local_ca_offset = 3; // latest ca_offset in L2
+  int64 pending_l1_count = 4; // count of PENDING_CA in L1
+  string details = 5;        // human-readable status details
+
+  enum HealthState {
+    HEALTHY = 0;
+    DEGRADED = 1;
+    REPAIR = 2;
+    UNHEALTHY = 3;
+  }
+}

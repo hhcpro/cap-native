@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  ca-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.ca-core
+    container_name: ca-core
+    ports:
+      - "50051:50051"  # CA Core gRPC
+      - "50052:50052"  # CA Bootstrap gRPC
+    volumes:
+      - ca-db:/data/db
+      - ca-storage:/data/storage
+    environment:
+      - CA_DB_PATH=/data/db
+      - CA_STORAGE_PATH=/data/storage
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50051"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  pa-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.pa-node
+    container_name: pa-node-1
+    ports:
+      - "50053:50053"
+    volumes:
+      - pa-node-1-db:/data/db
+    environment:
+      - AGENT_ID=pa-node-1
+      - PA_DB_PATH=/data/db
+      - CA_HOST=ca-core
+      - CA_PORT=50051
+    depends_on:
+      - ca-core
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50053"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  pa-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.pa-node
+    container_name: pa-node-2
+    ports:
+      - "50054:50053"
+    volumes:
+      - pa-node-2-db:/data/db
+    environment:
+      - AGENT_ID=pa-node-2
+      - PA_DB_PATH=/data/db
+      - CA_HOST=ca-core
+      - CA_PORT=50051
+    depends_on:
+      - ca-core
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50053"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  pa-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.pa-node
+    container_name: pa-node-3
+    ports:
+      - "50055:50053"
+    volumes:
+      - pa-node-3-db:/data/db
+    environment:
+      - AGENT_ID=pa-node-3
+      - PA_DB_PATH=/data/db
+      - CA_HOST=ca-core
+      - CA_PORT=50051
+    depends_on:
+      - ca-core
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=:50053"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  ca-db:
+  ca-storage:
+  pa-node-1-db:
+  pa-node-2-db:
+  pa-node-3-db:
