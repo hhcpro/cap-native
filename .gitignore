@@ -49,9 +49,13 @@ buildNumber.properties
 # VS Code
 .vscode/
 
-# LMDB data directories
+# LMDB data directories (ignore data, not source code)
 **/db/
-**/storage/
+/storage/
+/ca-core/storage/
+/pa-node/storage/
+/tmp/ca-core/
+/tmp/pa-node/
 
 # Temporary data
 /tmp/
