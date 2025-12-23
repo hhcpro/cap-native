@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package storage;
+
+option java_multiple_files = true;
+option java_package = "com.capnative.common.storage.proto";
+option java_outer_classname = "StorageProto";
+
+// Per-agent ledger entry (CA Core)
+message AgentLedgerEntryProto {
+  string agent_id = 1;
+  int64 agent_seq = 2;
+  string tx_id = 3;
+  bytes payload = 4;
+  Decision decision = 5;
+  string reason = 6;
+  int64 created_at = 7;   // unix millis
+  int64 decided_at = 8;   // unix millis
+  int64 ca_offset = 9;
+
+  enum Decision {
+    PENDING_DECISION = 0;
+    COMMITTED = 1;
+    REJECTED = 2;
+  }
+}
+
+// Consolidated ledger entry (CA Core)
+message ConsolidatedLedgerEntryProto {
+  int64 ca_offset = 1;
+  string tx_id = 2;
+  string agent_id = 3;
+  bytes ledger_diffs = 4;
+  bytes metadata = 5;
+  int64 committed_at = 6;  // unix millis
+}
+
+// L1 entry (PA Node)
+message L1EntryProto {
+  int64 l1_seq = 1;
+  string tx_id = 2;
+  bytes payload = 3;
+  L1Status status = 4;
+  int64 ca_offset = 5;
+  string reason = 6;
+  int64 created_at = 7;   // unix millis
+  int64 updated_at = 8;   // unix millis
+
+  enum L1Status {
+    PENDING_CA = 0;
+    COMMITTED_CA = 1;
+    REJECTED_CA = 2;
+  }
+}
+
+// L2 entry (PA Node)
+message L2EntryProto {
+  int64 ca_offset = 1;
+  string tx_id = 2;
+  bytes ledger_diffs = 3;
+  int64 applied_at = 4;   // unix millis
+}
