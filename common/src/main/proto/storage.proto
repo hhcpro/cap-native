@@ -60,3 +60,12 @@ message L2EntryProto {
   bytes ledger_diffs = 3;
   int64 applied_at = 4;   // unix millis
 }
+
+// Transaction metadata (replaces JSON)
+message TransactionMetadataProto {
+  string agent_id = 1;
+  int64 agent_seq = 2;
+  int64 processed_at = 3;  // unix millis
+  string ca_node_id = 4;   // CA node identifier
+  int32 batch_id = 5;      // Batch identifier for performance tracking
+}

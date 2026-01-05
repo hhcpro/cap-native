@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package offload;
+
+option java_multiple_files = true;
+option java_package = "com.capnative.common.offload.proto";
+option java_outer_classname = "OffloadProto";
+
+// Segment containing a batch of consolidated ledger entries
+message SegmentProto {
+  int64 start_offset = 1;
+  int64 end_offset = 2;
+  string checksum = 3;          // SHA-256 checksum of entries
+  int32 schema_version = 4;
+  repeated ConsolidatedEntryProto entries = 5;
+  int64 created_at = 6;         // unix timestamp millis
+}
+
+// Individual entry in a segment (optimized binary format)
+message ConsolidatedEntryProto {
+  int64 ca_offset = 1;
+  string tx_id = 2;
+  string agent_id = 3;
+  bytes ledger_diffs = 4;
+  bytes metadata = 5;
+  int64 committed_at = 6;       // unix timestamp millis
+}
+
+// Snapshot of system state at a specific offset
+message SnapshotProto {
+  int64 snapshot_offset = 1;
+  int64 snapshot_timestamp = 2; // unix timestamp millis
+  bytes state_payload = 3;      // Serialized state (can be nested protobuf)
+  string checksum = 4;          // SHA-256 checksum
+  int32 schema_version = 5;
+
+  // Merkle tree root for integrity verification
+  bytes merkle_root = 6;
+
+  // Statistics about the snapshot
+  SnapshotStats stats = 7;
+}
+
+message SnapshotStats {
+  int64 total_transactions = 1;
+  int64 total_accounts = 2;
+  int64 state_size_bytes = 3;
+}
+
+// Metadata catalog entry
+message CheckpointMetadataProto {
+  int64 snapshot_offset = 1;
+  string snapshot_checksum = 2;
+  bytes snapshot_merkle_root = 3;
+  repeated SegmentMetadata segments = 4;
+  int64 created_at = 5;
+  bool trusted = 6;
+}
+
+message SegmentMetadata {
+  int64 start_offset = 1;
+  int64 end_offset = 2;
+  string checksum = 3;
+  bytes merkle_root = 4;
+}

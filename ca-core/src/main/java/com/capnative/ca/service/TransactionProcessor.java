@@ -4,16 +4,17 @@ import com.capnative.ca.storage.AgentLedgerStorage;
 import com.capnative.ca.storage.ConsolidatedLedgerStorage;
 import com.capnative.common.model.AgentLedgerEntry;
 import com.capnative.common.model.ConsolidatedLedgerEntry;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.capnative.common.storage.proto.TransactionMetadataProto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.Map;
 
 /**
- * Core transaction processing logic for CA.
+ * Core transaction processing logic for CA (legacy single-threaded).
  * Handles validation, ACID transactions, and ledger updates.
+ *
+ * NOTE: Consider using BatchTransactionProcessor for higher performance.
  */
 public class TransactionProcessor {
     private static final Logger logger = LoggerFactory.getLogger(TransactionProcessor.class);
@@ -21,15 +22,24 @@ public class TransactionProcessor {
     private final AgentLedgerStorage agentLedgerStorage;
     private final ConsolidatedLedgerStorage consolidatedLedgerStorage;
     private final BusinessLogicValidator validator;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final String caNodeId;
 
     public TransactionProcessor(
             AgentLedgerStorage agentLedgerStorage,
             ConsolidatedLedgerStorage consolidatedLedgerStorage,
             BusinessLogicValidator validator) {
+        this(agentLedgerStorage, consolidatedLedgerStorage, validator, "ca-core-1");
+    }
+
+    public TransactionProcessor(
+            AgentLedgerStorage agentLedgerStorage,
+            ConsolidatedLedgerStorage consolidatedLedgerStorage,
+            BusinessLogicValidator validator,
+            String caNodeId) {
         this.agentLedgerStorage = agentLedgerStorage;
         this.consolidatedLedgerStorage = consolidatedLedgerStorage;
         this.validator = validator;
+        this.caNodeId = caNodeId;
     }
 
     /**
@@ -115,18 +125,19 @@ public class TransactionProcessor {
         }
     }
 
+    /**
+     * Create binary protobuf metadata (replaces JSON).
+     */
     private byte[] createMetadata(String agentId, long agentSeq) {
-        try {
-            Map<String, Object> metadata = Map.of(
-                    "agentId", agentId,
-                    "agentSeq", agentSeq,
-                    "processedAt", Instant.now().toString()
-            );
-            return objectMapper.writeValueAsBytes(metadata);
-        } catch (Exception e) {
-            logger.error("Failed to create metadata", e);
-            return new byte[0];
-        }
+        TransactionMetadataProto metadata = TransactionMetadataProto.newBuilder()
+                .setAgentId(agentId)
+                .setAgentSeq(agentSeq)
+                .setProcessedAt(Instant.now().toEpochMilli())
+                .setCaNodeId(caNodeId)
+                .setBatchId(0)  // Legacy processor has no batches
+                .build();
+
+        return metadata.toByteArray();
     }
 
     /**

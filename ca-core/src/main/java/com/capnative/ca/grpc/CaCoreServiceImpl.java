@@ -1,5 +1,6 @@
 package com.capnative.ca.grpc;
 
+import com.capnative.ca.service.BatchTransactionProcessor;
 import com.capnative.ca.service.TransactionProcessor;
 import com.capnative.ca.storage.ConsolidatedLedgerStorage;
 import com.capnative.common.grpc.ca.*;
@@ -10,20 +11,39 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * gRPC service implementation for CA Core.
+ * Supports both legacy TransactionProcessor and high-performance BatchTransactionProcessor.
  */
 public class CaCoreServiceImpl extends CaCoreGrpc.CaCoreImplBase {
     private static final Logger logger = LoggerFactory.getLogger(CaCoreServiceImpl.class);
 
     private final TransactionProcessor transactionProcessor;
+    private final BatchTransactionProcessor batchTransactionProcessor;
     private final ConsolidatedLedgerStorage consolidatedLedgerStorage;
 
+    /**
+     * Constructor using legacy single-threaded processor.
+     */
     public CaCoreServiceImpl(
             TransactionProcessor transactionProcessor,
             ConsolidatedLedgerStorage consolidatedLedgerStorage) {
         this.transactionProcessor = transactionProcessor;
+        this.batchTransactionProcessor = null;
+        this.consolidatedLedgerStorage = consolidatedLedgerStorage;
+    }
+
+    /**
+     * Constructor using high-performance batch processor (recommended).
+     */
+    public CaCoreServiceImpl(
+            BatchTransactionProcessor batchTransactionProcessor,
+            ConsolidatedLedgerStorage consolidatedLedgerStorage) {
+        this.transactionProcessor = null;
+        this.batchTransactionProcessor = batchTransactionProcessor;
         this.consolidatedLedgerStorage = consolidatedLedgerStorage;
     }
 
@@ -33,7 +53,7 @@ public class CaCoreServiceImpl extends CaCoreGrpc.CaCoreImplBase {
             StreamObserver<ProposeResponse> responseObserver) {
 
         try {
-            logger.info("Received ProposeTransaction: agentId={}, agentSeq={}, txId={}",
+            logger.debug("Received ProposeTransaction: agentId={}, agentSeq={}, txId={}",
                     request.getAgentId(), request.getAgentSeq(), request.getTxId());
 
             // Validate request
@@ -51,13 +71,31 @@ public class CaCoreServiceImpl extends CaCoreGrpc.CaCoreImplBase {
                 return;
             }
 
-            // Process transaction
-            TransactionProcessor.TransactionResult result = transactionProcessor.processTransaction(
-                    request.getAgentId(),
-                    request.getAgentSeq(),
-                    request.getTxId(),
-                    request.getPayload().toByteArray()
-            );
+            // Process transaction using batch or legacy processor
+            TransactionProcessor.TransactionResult result;
+
+            if (batchTransactionProcessor != null) {
+                // High-performance batch processing path
+                CompletableFuture<TransactionProcessor.TransactionResult> future =
+                        batchTransactionProcessor.submitTransaction(
+                                request.getAgentId(),
+                                request.getAgentSeq(),
+                                request.getTxId(),
+                                request.getPayload().toByteArray()
+                        );
+
+                // Wait for result (with timeout)
+                result = future.get(30, TimeUnit.SECONDS);
+
+            } else {
+                // Legacy single-threaded path
+                result = transactionProcessor.processTransaction(
+                        request.getAgentId(),
+                        request.getAgentSeq(),
+                        request.getTxId(),
+                        request.getPayload().toByteArray()
+                );
+            }
 
             // Build response
             ProposeResponse.Builder responseBuilder = ProposeResponse.newBuilder()
@@ -68,14 +106,14 @@ public class CaCoreServiceImpl extends CaCoreGrpc.CaCoreImplBase {
                         .setDecision(ProposeResponse.Decision.COMMITTED)
                         .setCaOffset(result.getCaOffset());
 
-                logger.info("Transaction committed: txId={}, caOffset={}",
+                logger.debug("Transaction committed: txId={}, caOffset={}",
                         result.getTxId(), result.getCaOffset());
             } else {
                 responseBuilder
                         .setDecision(ProposeResponse.Decision.REJECTED)
                         .setReason(result.getReason());
 
-                logger.info("Transaction rejected: txId={}, reason={}",
+                logger.debug("Transaction rejected: txId={}, reason={}",
                         result.getTxId(), result.getReason());
             }
 

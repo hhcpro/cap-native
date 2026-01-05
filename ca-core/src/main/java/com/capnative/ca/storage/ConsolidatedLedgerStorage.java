@@ -67,6 +67,51 @@ public class ConsolidatedLedgerStorage {
         });
     }
 
+    /**
+     * Atomically append a batch of entries in a single LMDB transaction.
+     * Critical for high-performance batch processing.
+     *
+     * @param entries List of entries to append (must have sequential ca_offsets)
+     */
+    public void appendBatch(List<ConsolidatedLedgerEntry> entries) {
+        if (entries.isEmpty()) {
+            return;
+        }
+
+        env.executeWrite(txn -> {
+            long expectedOffset = latestOffsetCache.get() + 1;
+            long lastOffset = expectedOffset - 1;
+
+            for (ConsolidatedLedgerEntry entry : entries) {
+                if (entry.getCaOffset() != expectedOffset) {
+                    throw new IllegalArgumentException(
+                            String.format("Non-sequential offset in batch: expected=%d, got=%d",
+                                    expectedOffset, entry.getCaOffset()));
+                }
+
+                ByteBuffer key = LmdbSerializer.serializeLong(entry.getCaOffset());
+                ByteBuffer value = LmdbSerializer.serializeProto(ProtoConverters.toProto(entry));
+
+                consolidatedLedgerDb.put(txn, key, value);
+
+                lastOffset = entry.getCaOffset();
+                expectedOffset++;
+            }
+
+            // Update metadata once for the batch
+            ByteBuffer metaKey = LmdbSerializer.serializeString(LATEST_OFFSET_KEY);
+            ByteBuffer metaValue = LmdbSerializer.serializeLong(lastOffset);
+            metadataDb.put(txn, metaKey, metaValue);
+
+            latestOffsetCache.set(lastOffset);
+
+            logger.debug("Appended batch: {} entries, offsets [{}, {}]",
+                    entries.size(), entries.get(0).getCaOffset(), lastOffset);
+
+            return null;
+        });
+    }
+
     public Optional<ConsolidatedLedgerEntry> get(long caOffset) {
         return env.executeRead(txn -> {
             ByteBuffer key = LmdbSerializer.serializeLong(caOffset);
